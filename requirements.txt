@@ -1,2 +1,5 @@
-# Core has no third-party deps.
-# Add packages required by your platform adapter here.
+# Core
+# WeCom AI Bot
+websockets>=12.0
+cryptography>=42.0
+requests>=2.26.0

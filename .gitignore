@@ -1,0 +1,8 @@
+.env
+.env.local
+__pycache__/
+WordStock/
+stock-assistant-ref/
+keys/
+msgaudit_seq.json
+sdk/

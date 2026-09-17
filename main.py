@@ -6,11 +6,13 @@ Core is platform-agnostic. Wire in a BotAdapter for your chat platform.
 
 from __future__ import annotations
 
+import os
 import time
 
-from configutil import load_config, save_config
+from configutil import load_config, save_config, load_dotenv_file
 from engine import Engine
-from example_adapter import ExampleAdapter
+from msgaudit_adapter import MsgAuditAdapter
+from wecom_adapter import WeComAdapter
 from wordstock import WordStock
 
 VERSION = "4.0.0-minimal"
@@ -31,6 +33,10 @@ def _help() -> None:
   interval <秒>                词库链间隔（默认900）
   replychance <0-100>          回复概率
   grouplist                    查看会话列表
+  rooms                        存档模式：列出见过的 roomid（存档不返回群名）
+  bind <名字> <roomid>         把群名绑定到存档 roomid
+  hook <名字|会话ID> <key>     绑定群机器人 webhook key
+  peek                         只收不发，看近期会话（可用来确认 6组！）
   status                       查看状态
   exit                         退出
 """.strip()
@@ -65,14 +71,17 @@ def _remove_list(cfg: dict, key: str, ids: list) -> None:
 
 
 def main() -> None:
-    print(f"ChatLearner {VERSION} — 仅保留文本/图片学习与回复")
+    print(f"ChatLearner {VERSION} — 企微文本/图片学习与回复")
     cfg = load_config()
     cfg["stopsign"] = 0
     cfg["learning"] = 0
     cfg["reply"] = 0
     save_config(cfg)
 
-    adapter = ExampleAdapter()
+    load_dotenv_file()
+    # 存档模式：配了 WECOM_MSGAUDIT_CORPID 就走存档，群里不 @ 也能收到全部消息。
+    use_audit = bool(os.getenv("WECOM_MSGAUDIT_CORPID", "").strip())
+    adapter = MsgAuditAdapter() if use_audit else WeComAdapter()
     adapter.connect()
 
     stock = WordStock()
@@ -136,6 +145,27 @@ def main() -> None:
         elif cmd == "grouplist":
             print("学习会话:", cfg.get("learninggrouplist"))
             print("回复会话:", cfg.get("replygrouplist"))
+            print("群名映射:", cfg.get("group_aliases"))
+        elif cmd == "rooms":
+            if hasattr(adapter, "dump_rooms"):
+                rooms = adapter.dump_rooms()
+                print(f"已见群 {len(rooms)} 个（存档不返回群名，用内容/成员认）")
+                for rid, info in rooms.items():
+                    print("  ", rid, info)
+                if not rooms:
+                    print("还没有消息。确认群里有人发言且成员在存档授权范围内。")
+            else:
+                print("当前不是存档模式，用 peek。")
+        elif cmd == "bind" and len(parts) == 3:
+            cfg["group_aliases"][parts[1]] = parts[2]
+            save_config(cfg)
+            print("group_aliases", cfg["group_aliases"])
+        elif cmd == "hook" and len(parts) == 3:
+            cfg.setdefault("webhook_keys", {})[parts[1]] = parts[2]
+            save_config(cfg)
+            print("webhook_keys", cfg["webhook_keys"])
+        elif cmd == "peek":
+            adapter.peek_inbound(seconds=8.0, name_hint="6组！")
         elif cmd == "status":
             print(
                 f"learning={cfg.get('learning')} reply={cfg.get('reply')} "
@@ -147,6 +177,7 @@ def main() -> None:
             cfg["reply"] = 0
             save_config(cfg)
             engine.stop()
+            adapter.close()
             print("退出中…")
             time.sleep(0.8)
             break

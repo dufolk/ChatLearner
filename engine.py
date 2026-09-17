@@ -20,6 +20,20 @@ def _should_stop(cfg: dict) -> bool:
     return int(cfg.get("stopsign", 0)) == 1
 
 
+def expand_session_ids(cfg: dict, key: str) -> set:
+    """Match both configured names (e.g. 6组！) and mapped chatids."""
+    ids = set(cfg.get(key) or [])
+    aliases = cfg.get("group_aliases") or {}
+    extra = set()
+    for item in list(ids):
+        if item in aliases and aliases[item]:
+            extra.add(aliases[item])
+        for name, cid in aliases.items():
+            if cid and item == cid:
+                extra.add(name)
+    return ids | extra
+
+
 def _pick_weighted(answers: List[dict]) -> Optional[dict]:
     if not answers:
         return None
@@ -131,8 +145,8 @@ class Engine:
             if not learning_on and not reply_on:
                 time.sleep(0.5)
                 continue
-            learn_groups = set(cfg.get("learninggrouplist") or [])
-            reply_groups = set(cfg.get("replygrouplist") or [])
+            learn_groups = expand_session_ids(cfg, "learninggrouplist")
+            reply_groups = expand_session_ids(cfg, "replygrouplist")
             interval = int(cfg.get("interval", 900))
             chance = int(cfg.get("replychance", 100))
             try:

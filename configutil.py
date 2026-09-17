@@ -9,6 +9,21 @@ from typing import Any, Dict
 
 _lock = threading.Lock()
 
+
+def load_dotenv_file(path: str = ".env") -> None:
+    if not os.path.exists(path):
+        return
+    with open(path, "r", encoding="utf-8-sig") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
 DEFAULT_CONFIG: Dict[str, Any] = {
     "learning": 0,
     "reply": 0,
@@ -17,6 +32,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "interval": 900,
     "replychance": 100,
     "stopsign": 0,
+    "group_aliases": {},
+    "webhook_keys": {},
 }
 
 

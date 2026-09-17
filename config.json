@@ -5,5 +5,8 @@
   "replygrouplist": [],
   "interval": 900,
   "replychance": 100,
-  "stopsign": 0
+  "stopsign": 0,
+  "group_aliases": {
+    "6组！": ""
+  }
 }
