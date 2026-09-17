@@ -1,95 +1,70 @@
-# ChatLearner
+# BG 积分 bot
 
-基于会话词库的学习型聊天机器人精简版：**文本 + 图片**，接入企业微信智能机器人长连接。
+一个只会算分的企业微信群机器人：维护 **IEG / CDG / TEG / CSIG / WXG / PCG** 六个 BG 的积分榜。
 
-## 两种接入模式
+传输方式是企微**智能机器人长连接**（`wss://openws.work.weixin.qq.com`，BotID + Secret 认证），
+收发走 `aibot_subscribe` / `aibot_msg_callback` / `aibot_respond_msg` / `aibot_send_msg`，
+对齐 [stock-assistant](https://github.com/dufolk/stock-assistant) 的 aibot 路径。
 
-| | 模式一：智能机器人长连接 | 模式二：会话内容存档 |
-|---|---|---|
-| 群里要不要 @ | **要 @** 才收得到 | **不用 @**，全群消息都收 |
-| 凭据 | BotID + Secret | corpid + 存档 Secret + RSA 私钥 |
-| 额外依赖 | 无 | 官方原生 SDK（dll/so） |
-| 保留时长 | 实时 | 只回溯 5 天 |
-| 推荐场景 | 问答型机器人 | 学习型（要整群语料） |
+## 跑起来
 
-`.env` 里填了 `WECOM_MSGAUDIT_CORPID` 就自动走模式二，否则走模式一。
-
-## 模式一：智能机器人（默认）
-
-1. 管理后台 → 智能机器人 → 创建机器人 → 开启 **API 模式 → 长连接**，拿到 BotID 和 Secret，填进 `.env`。
+1. 复制 `.env.example` 为 `.env`，填入 `WECOM_BOT_ID`、`WECOM_SECRET`（`.env` 不入库）。
 2. `pip install -r requirements.txt`
 3. `python main.py`
 
-回调字段只有 `chatid` / `chattype` / `from.userid`，**没有群名**。把机器人拉进「6组！」，群里 @它 一句，控制台会打印：
+群里 **@机器人** 发一句话就能触发（群聊只有 @ 的消息会推回调，这是企微限制）。
+
+## 支持的指令
+
+| 说什么 | 效果 |
+|---|---|
+| `IEG加1分`、`给TEG加3分`、`WXG +5` | 加分；不写分数按 1 分算 |
+| `CSIG扣2分`、`PCG减一分` | 扣分；支持数字和中文数字 |
+| `WXG加2分 PCG扣1分` | 一次多个 BG，分别结算后回一张榜 |
+| `积分榜` / `排行榜` / `分数` / `排名` | 只看榜 |
+| `IEG清零` / `清零` | 单个或全部归零 |
+| `help` | 用法说明 |
+
+单次最多 ±999，数字必须是紧跟操作符的那种（`2024给IEG加分` 里的 2024 不会被算进去）。
+
+## 榜单长啥样
+
+回复是 **markdown**：标题加粗 + 逐行引用 + `<font color>` 上色。
 
 ```text
-企微收消息 chattype=group chatid=wrxxxx from=zhangsan msgtype=text quote=False
+**BG 积分榜**
+> **IEG** +3 → +15 分 · 第 1 名
+> 🥇 **IEG** +15 ▉▉▉▉▉▉▉▉▉▉
+> 🥈 **WXG** +8 ▉▉▉▉▉
+> 3. **CDG** +2 ▉
+> 4. **TEG** 0
+> 5. **PCG** 0
+> 6. **CSIG** -3 ▉▉
+<font color="comment">会话 …abc123 · 更新 09-17 15:04</font>
 ```
 
-然后 `add both wrxxxx`，或敲 `bind 6组！ wrxxxx` 用群名代替。
+颜色：`info` 绿（正分）、`warning` 橙红（负分）、`comment` 灰（0 分）。
 
-## 模式二：会话内容存档（不用 @）
+**关于 HTML**：企微不是真的支持 HTML，只认 `<font color="info|warning|comment">` 这一个标签配合 markdown
+（V1 子集：加粗、引用、链接、font color；标题/代码块/表格/列表在 V1 里不保证渲染）。
+想要表格可以试 `markdown_v2`（客户端 4.1.38+），但不确定所有机器人的 API 版本都认——
+`.env` 里设 `WECOM_MD_MSGTYPE=markdown_v2` 就能切，不好用删掉即可。
 
-### 怎么领这些东西
+## 数据
 
-1. **开通**：管理后台 → **安全与管理 → 管理工具 → 会话内容存档**，开通并把目标群的内部成员纳入授权范围（发送方或接收方只要在范围内，该消息就会存档；群外/外部成员不在范围内的话，这条消息拿不到）。
-2. **corpid**：我的企业 → 企业信息 → 最下面的「企业ID」，形如 `wwd08c8exxxx5ab44d`。
-3. **存档 Secret**：会话内容存档页面里的 **Secret**（跟应用 Secret 不是一个）。
-4. **RSA 密钥对**：自己生成，**私钥留在本地**，**公钥**粘贴到存档页面并记下版本号：
-   ```bash
-   openssl genrsa -out keys/msgaudit_private.pem 2048
-   openssl rsa -in keys/msgaudit_private.pem -pubout -out keys/msgaudit_public.pem
-   ```
-5. **原生 SDK**：官方文档中心 → 会话内容存档 → 下载 SDK，把 `WeWorkFinanceSdk.dll`（Windows）或 `libWeWorkFinanceSdk.so`（Linux）放到项目根或 `sdk/`，也可用 `WECOM_SDK_DLL` 指绝对路径。
-6. 把 2、3、4、5 填进 `.env`（见 `.env.example`），`python main.py`。
-
-### 找不到群名的问题
-
-存档 API 只给 `roomid`（`wr` 开头），**不返回「6组！」这个显示名**。启动后让群里随便说几句，然后：
-
-```text
-rooms                      # 列出见到的 roomid + 最近发言者/成员
-bind 6组！ wrXXXXXXXXXX    # 绑定，之后 add both 6组！ 即可
-add both 6组！
-learning
-```
-
-### 发消息（重要）
-
-存档**只能收不能发**。回复必须另挂一个发送通道，推荐**群机器人 Webhook**：
-
-1. 「6组！」群设置 → **群机器人** → 添加 → 复制它的 Webhook 地址里 `key=` 后面那串。
-2. `hook 6组！ <那串key>`（或写进 `config.json` 的 `webhook_keys`）。
-
-之后所有回复都走这个 key：**不需要 @、不需要事先交互**，限 20 条/分钟。没配 key 时，模式一还会退回 `aibot_send_msg`（但那要求群里先 @ 过一次）。
+分数存在 `scores.json`（按会话 chatid 分开，已 gitignore），含最近 200 条变更日志。
+控制台里敲 `board` 可以打印最近会话的榜单，`peek` 开一个只收不发的探测窗口。
 
 ## 结构
 
 | 文件 | 作用 |
-|------|------|
-| `main.py` | 控制台入口（按 .env 自动选模式） |
-| `wecom_adapter.py` | 智能机器人长连接适配器（要 @） |
-| `msgaudit_adapter.py` | 会话存档适配器（不用 @，只收） |
-| `webhook.py` | 群机器人 Webhook 发送 |
-| `engine.py` | 学习链 + 精确匹配回复 |
-| `wordstock.py` | 词库 |
-| `message.py` | Plain / Image |
-| `adapter.py` | 平台接口 |
-| `config.json` | 运行配置 |
-
-## 群消息覆盖范围（企微硬限制）
-
-- 模式一：群聊里**只有 @机器人** 的消息会推回调。变通玩法是 **引用某条消息 + @机器人**，回调里的 `quote` 带被引用原文，程序已把它并入学习链。
-- 模式二：全群消息都会收，但只能回溯 **5 天**，且需要企业先开通存档、配置可调用 IP。
-- 存档路径目前只做文本：图片消息会保留 `sdkfileid` 占位（官方 SDK 的媒体接口不返回长度，解码不可靠），不入库。
-- 想要「不用 @ 又能发言」以外的东西，比如全量历史，只能按期把存档数据落库，别指望实时 API。
-
-## 行为说明
-
-- **学习**：同一会话内，间隔超过 `interval` 秒后的第一条算新问题；之后每条既是上一条的答案，也是新问题。
-- **回复**：精确匹配后按权重抽取一条发送，发送顺序是 webhook → `aibot_respond_msg`（带回调 `req_id`）→ `aibot_send_msg`。
-- 频率：webhook 20 条/分钟；智能机器人 30 条/分钟、1000 条/小时。
+|---|---|
+| `main.py` | 入口：长连接收发循环 + 控制台指令 |
+| `scorebot.py` | 指令解析、积分存储、榜单渲染 |
+| `wecom_adapter.py` | 企微长连接适配器 |
+| `adapter.py` | 平台接口（`IncomingMessage`） |
+| `configutil.py` | `.env` 加载 + JSON 读写 |
 
 ## 许可证
 
-AGPL-3.0（见 `LICENSE`）。基于原 ChatLearning 项目精简而来，请保留原作者版权声明。
+AGPL-3.0（见 `LICENSE`）。

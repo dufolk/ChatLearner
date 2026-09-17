@@ -1,8 +1,8 @@
-.env
 .env.local
 __pycache__/
-WordStock/
-stock-assistant-ref/
-keys/
-msgaudit_seq.json
+scores.json
+bot.log
+bot.err
 sdk/
+keys/
+stock-assistant-ref/
