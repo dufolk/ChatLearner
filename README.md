@@ -50,6 +50,22 @@
 想要表格可以试 `markdown_v2`（客户端 4.1.38+），但不确定所有机器人的 API 版本都认——
 `.env` 里设 `WECOM_MD_MSGTYPE=markdown_v2` 就能切，不好用删掉即可。
 
+## LLM skill（可选）
+
+`.env` 里填 `DEEPSEEK_API_KEY` 就自动启用，模型输出一行 JSON 说明「加分 / 看榜 / 清零 / 不回」，
+由 `llm_skill.py` 解析后落成榜单；**留空就完全走上面的正则规则**，一个 token 都不花。
+
+```ini
+DEEPSEEK_API_KEY=sk-xxxxx
+# DEEPSEEK_BASE_URL=https://api.deepseek.com
+# DEEPSEEK_MODEL=deepseek-chat   # 也可填 deepseek-v4-flash / deepseek-v4-pro
+```
+
+- 上下文窗口：每个会话只带**最近 10 条**（用户的话 + 机器人的回复），够模型搞清楚「再给赢的那个加三分」里的「赢的那个」是谁。
+- 兜底：没 key、网络挂了、返回的不是合法 JSON，**全部回落到正则规则**，不会把机器人搞哑。
+- 彩蛋（刷屏/复读）仍然优先于 LLM，不用花钱。
+- 单次成本量级（Flash/短上下文）：~¥0.0016，20 元大概一万次。
+
 ## 数据
 
 分数存在 `scores.json`（按会话 chatid 分开，已 gitignore），含最近 200 条变更日志。
@@ -61,6 +77,8 @@
 |---|---|
 | `main.py` | 入口：长连接收发循环 + 控制台指令 |
 | `scorebot.py` | 指令解析、积分存储、榜单渲染 |
+| `llm_skill.py` | LLM skill（DeepSeek）：上下文 + JSON 决策 + 兜底 |
+| `eggs.py` | 彩蛋 |
 | `wecom_adapter.py` | 企微长连接适配器 |
 | `adapter.py` | 平台接口（`IncomingMessage`） |
 | `configutil.py` | `.env` 加载 + JSON 读写 |

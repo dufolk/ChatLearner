@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from configutil import load_json, save_json
 from eggs import EggBox, flavor_lines, silent_lines
+from llm_skill import LlmSkill
 
 SCORE_FILE = os.getenv("SCORE_FILE", "scores.json")
 BG_ORDER = ["IEG", "CDG", "TEG", "CSIG", "WXG", "PCG"]
@@ -155,6 +156,11 @@ class ScoreBot:
         }
         self._log: List[dict] = list(raw.get("log") or [])
         self._eggs = EggBox()
+        self._llm = LlmSkill()
+        if self._llm.enabled:
+            print(f"LLM skill 已启用：{self._llm.model}")
+        else:
+            print("LLM skill 未启用（没填 DEEPSEEK_API_KEY），走正则规则")
 
     def board(self, chatid: Any) -> Dict[str, int]:
         key = str(chatid)
@@ -202,6 +208,13 @@ class ScoreBot:
         return board
 
     def handle(self, msg: Any) -> Optional[str]:
+        """入口：记上下文、回完话再记一句机器人的回复。"""
+        reply = self._dispatch(msg)
+        if reply:
+            self._llm.remember(str(msg.group_id), "机器人", reply)
+        return reply
+
+    def _dispatch(self, msg: Any) -> Optional[str]:
         """收到一条消息，返回要回复的 markdown；不需要回复时返回 None。"""
         chatid = str(msg.group_id)
         self.last_chatid = chatid
@@ -212,9 +225,17 @@ class ScoreBot:
                 break
 
         sender = str(getattr(msg, "sender_id", "") or "")
+        if text:
+            self._llm.remember(chatid, sender, text)
+
         egg = self._eggs.record(chatid, sender, text)
         if egg:
             return "\n".join(egg)
+
+        # 有 key 就先问 LLM，LLM 没把握（返回 None）再走正则规则。
+        decision = self._llm.decide(chatid, sender, text)
+        if decision:
+            return self._apply_decision(chatid, decision, sender)
 
         board = self.board(chatid)
         if not text:
@@ -247,3 +268,34 @@ class ScoreBot:
 
         # 听不懂的话就不回，教程只在写了 help 的时候才出。
         return None
+
+    def _apply_decision(self, chatid: str, decision: dict, actor: str) -> Optional[str]:
+        """按 LLM 的判断出牌。"""
+        action = decision.get("action")
+        say = decision.get("say") or ""
+        ops = [(op["bg"], int(op["delta"])) for op in decision.get("ops") or []]
+
+        if action == "none":
+            return None
+
+        if action == "board":
+            return render_board(chatid, self.board(chatid), [say] if say else None)
+
+        if action == "reset":
+            targets = [bg for bg, _ in ops]
+            board = self.reset(chatid, targets or None)
+            label = "、".join(targets) if targets else "全部"
+            lines = [say] if say else []
+            lines.append(f"> 已清零：{label}")
+            return render_board(chatid, board, lines)
+
+        results = self.apply(chatid, ops, actor)
+        board_now = self.board(chatid)
+        ranks = _ranks(board_now)
+        header = [say] if say else []
+        header.extend(
+            f"**{bg}** {_fmt(delta)} → **{_fmt(new)}** 分（第 {ranks[bg]} 名）"
+            for bg, delta, new in results
+        )
+        header.extend(flavor_lines(results, board_now))
+        return render_board(chatid, board_now, header)

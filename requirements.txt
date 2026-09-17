@@ -1,2 +1,4 @@
 # Core: WeCom AI Bot 长连接
 websockets>=12.0
+# LLM skill
+requests>=2.26.0
