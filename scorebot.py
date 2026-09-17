@@ -32,7 +32,7 @@ HELP_TEXT = """**BG 积分榜 · 用法**
 > WXG加2分 PCG扣1分 → 一次改多个
 > 积分榜 / 排行榜 / 分数 → 只看榜
 > IEG清零 / 清零 → 单个或全部归零
-> help → 这条说明
+> help → 这条说明（只有写了 help 才会弹教程，听不懂的它不回）
 
 没写分数时按 1 分算，支持中文数字，单次最多 ±999，
 一句里带问号或「多少」的按聊天处理，不改分。"""
@@ -245,4 +245,5 @@ class ScoreBot:
         if _QUERY_RE.search(text) or _BG_RE.search(text):
             return render_board(chatid, board)
 
-        return HELP_TEXT
+        # 听不懂的话就不回，教程只在写了 help 的时候才出。
+        return None
